@@ -83,11 +83,14 @@ fn group(ui: &Ui) -> (usize, &'static str) {
     if ui.explainer.open {
         return (2, "Shortcut explainer");
     }
+    if ui.sound_sets.open {
+        return (3, "Sound sets");
+    }
     let rank = Pane::ALL
         .iter()
         .position(|pane| *pane == ui.pane)
         .unwrap_or(0);
-    let rank = if rank == 0 { 0 } else { rank + 2 };
+    let rank = if rank == 0 { 0 } else { rank + 3 };
     let name = match ui.pane {
         Pane::General => "General",
         Pane::Modes => "Modes",
@@ -116,6 +119,7 @@ mod tests {
             "General/mac-settings",
             "Transcription picker/picker",
             "Shortcut explainer/shortcut-explainer",
+            "Sound sets/sound-sets",
             "General/shortcut-row",
             "Modes/modes-global",
             "Meetings/meetings-calendar",

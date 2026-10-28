@@ -1369,11 +1369,13 @@ fn platform_goldens() {
             "mac-onboarding-landed",
             "shortcut-explainer",
             "shortcut-explainer-toggle",
+            "sound-sets",
         ] {
             check_golden(scene, dark, PANE_SIZE);
         }
     }
     check_golden("shortcut-explainer-chord", false, PANE_SIZE);
+    check_golden("sound-sets-playing", true, PANE_SIZE);
     check_golden("mac-settings-permissions", true, PANE_SIZE);
     check_golden("mac-settings-advanced", false, PANE_SIZE);
     check_golden("meetings-calendar-denied", true, PANE_SIZE);

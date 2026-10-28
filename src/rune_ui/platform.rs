@@ -60,6 +60,8 @@ pub(super) struct Capabilities {
     pub(super) modifier_sides: bool,
     /// Input-source changes can operate the installed-model picker (macOS).
     pub(super) keyboard_model_switching: bool,
+    /// Failures play the sound set's error sound (macOS).
+    pub(super) error_sound: bool,
 }
 
 impl Capabilities {
@@ -79,6 +81,7 @@ impl Capabilities {
         hud_lab: false,
         modifier_sides: false,
         keyboard_model_switching: false,
+        error_sound: false,
     };
 
     pub(super) const MACOS: Self = Self {
@@ -97,6 +100,7 @@ impl Capabilities {
         hud_lab: true,
         modifier_sides: true,
         keyboard_model_switching: true,
+        error_sound: true,
     };
 
     pub(super) const WINDOWS: Self = Self {
@@ -115,6 +119,7 @@ impl Capabilities {
         hud_lab: false,
         modifier_sides: false,
         keyboard_model_switching: false,
+        error_sound: false,
     };
 
     /// This OS's capabilities, with the rows its window host decides.

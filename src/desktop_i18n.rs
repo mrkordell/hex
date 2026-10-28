@@ -567,8 +567,22 @@ const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Dev", ["Deweloperski", "开发版", "開発版", "Entwicklung", "Desarrollo"]),
     ("Sound volume", ["Głośność dźwięków", "提示音音量", "効果音の音量", "Lautstärke der Töne", "Volumen de sonidos"]),
     ("Sounds", ["Dźwięki", "提示音", "効果音", "Töne", "Sonidos"]),
-    ("Signature", ["Charakterystyczne", "标志性", "シグネチャー", "Signatur", "Distintivos"]),
-    ("Classic", ["Klasyczne", "经典", "クラシック", "Klassisch", "Clásicos"]),
+    ("Hex signature", ["Sygnatura Hex", "Hex 标志音", "Hex シグネチャー", "Hex-Signatur", "Firma de Hex"]),
+    ("Classic", ["Klasyczne", "经典", "クラシック", "Klassisch", "Clásico"]),
+    ("Click", ["Klik", "咔嗒", "クリック", "Klick", "Clic"]),
+    ("Soft tone", ["Łagodny ton", "柔和音", "ソフトトーン", "Sanfter Ton", "Tono suave"]),
+    ("Wood", ["Drewno", "木质", "ウッド", "Holz", "Madera"]),
+    ("Warm synth", ["Ciepły syntezator", "温暖合成器", "ウォームシンセ", "Warmer Synth", "Sintetizador cálido"]),
+    ("A kalimba motif that rises and comes home", ["Motyw kalimby, który wznosi się i wraca do domu", "上行后回到主音的卡林巴旋律", "上がって主音に戻るカリンバのモチーフ", "Ein Kalimba-Motiv, das aufsteigt und heimkehrt", "Un motivo de kalimba que sube y vuelve a casa"]),
+    ("The tones Hex first shipped with", ["Dźwięki, z którymi Hex zadebiutował", "Hex 最初自带的提示音", "Hex が最初に搭載していた音", "Die Töne, mit denen Hex zuerst erschien", "Los tonos con los que Hex se lanzó"]),
+    ("Mechanical key clicks", ["Kliknięcia mechanicznych klawiszy", "机械键盘的咔嗒声", "メカニカルキーのクリック音", "Mechanische Tastenklicks", "Clics de teclas mecánicas"]),
+    ("Warm, rounded blips", ["Ciepłe, zaokrąglone piknięcia", "温暖圆润的短音", "温かく丸みのあるブリップ音", "Warme, runde Blips", "Pitidos cálidos y redondos"]),
+    ("Soft marimba and hollow wood blocks", ["Miękka marimba i puste drewniane klocki", "柔和的马林巴与空心木鱼", "柔らかなマリンバと中空のウッドブロック", "Sanfte Marimba und hohle Holzblöcke", "Marimba suave y bloques de madera huecos"]),
+    ("A mellow analogue synth", ["Łagodny syntezator analogowy", "柔和的模拟合成器", "まろやかなアナログシンセ", "Ein sanfter Analog-Synth", "Un sintetizador analógico suave"]),
+    ("Start", ["Start", "开始", "開始", "Start", "Inicio"]),
+    ("Error", ["Błąd", "错误", "エラー", "Fehler", "Error"]),
+    ("Play", ["Odtwórz", "播放", "再生", "Abspielen", "Reproducir"]),
+    ("Sound volume is off", ["Głośność dźwięków jest wyłączona", "提示音音量已关闭", "サウンドの音量はオフです", "Die Tonlautstärke ist aus", "El volumen de los sonidos está desactivado"]),
     ("Spoken phrase (e.g. open code)", ["Wypowiadana fraza (np. open code)", "说出的短语（例如 open code）", "話すフレーズ（例: open code）", "Gesprochene Phrase (z. B. open code)", "Frase hablada (p. ej. open code)"]),
     ("Start Hex when you log in", ["Uruchamiaj Hex po zalogowaniu", "登录时启动 Hex", "ログイン時に Hex を起動", "Hex beim Anmelden starten", "Iniciar Hex al iniciar sesión"]),
     ("System instructions for rewriting dictation in this mode", ["Instrukcje systemowe do przepisywania dyktowania w tym trybie", "此模式下改写听写内容的系统说明", "このモードで音声入力を書き直すためのシステム指示", "Systemanweisungen zum Umschreiben von Diktaten in diesem Modus", "Instrucciones del sistema para reescribir el dictado en este modo"]),
@@ -972,6 +986,7 @@ mod tests {
         #[cfg(hex_capture)]
         include_str!("rune_ui/scrawl.rs"),
         include_str!("rune_ui/settings.rs"),
+        include_str!("rune_ui/sound_sets.rs"),
         include_str!("rune_ui/vocabulary.rs"),
         include_str!("rune_ui/voice_action.rs"),
         include_str!("rune_ui/windows_host.rs"),
@@ -1029,6 +1044,28 @@ mod tests {
             }
         }
         assert!(checked > 300, "only {checked} translated strings found");
+    }
+
+    /// The sound picker translates each set's name and character and each
+    /// cue's name, which are not literals at the call.
+    #[test]
+    fn every_sound_set_string_has_every_language() {
+        use crate::feedback::{Cue, SoundSet};
+        let table: std::collections::HashMap<_, _> = TRANSLATIONS.iter().copied().collect();
+        let strings = SoundSet::ALL
+            .into_iter()
+            .flat_map(|set| [set.name(), set.character()])
+            .chain(Cue::ALL.into_iter().map(Cue::name));
+        for english in strings {
+            let translations = table
+                .get(english)
+                .unwrap_or_else(|| panic!("{english:?} has no translations"));
+            assert!(
+                translations
+                    .iter()
+                    .all(|translation| !translation.is_empty())
+            );
+        }
     }
 
     #[test]
