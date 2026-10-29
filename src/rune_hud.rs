@@ -9,6 +9,9 @@
 //! steps both every 16 ms while the HUD is on screen (sleeping otherwise),
 //! and hands each frame's uniforms to the overlay, whose compositor only
 //! draws them. The listener never waits on it.
+//!
+//! The Sounds sheet draws its preview with the same [`Painter`], frames and
+//! [`DotScope`] on every OS.
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -26,11 +29,11 @@ use crate::dot_scope::{self, MAX_DOTS, Pose, Scope, Stage, Tuning};
 pub(crate) use crate::desktop_indicator_model::DictationIndicatorEvent as HudEvent;
 
 const FRAME: Duration = Duration::from_millis(16);
-const TOP_OFFSET: f32 = crate::desktop_indicator_model::TOP_OFFSET as f32;
-const BOTTOM_OFFSET: f32 = 24.0;
+pub(crate) const TOP_OFFSET: f32 = crate::desktop_indicator_model::TOP_OFFSET as f32;
+pub(crate) const BOTTOM_OFFSET: f32 = 24.0;
 /// Dot scope's window: room for its widest and tallest plate and the drop
 /// shadow below it.
-const DOT_SCOPE_WINDOW: (f32, f32) = (176.0, 80.0);
+pub(crate) const DOT_SCOPE_WINDOW: (f32, f32) = (176.0, 80.0);
 
 fn dot_scope_enabled() -> bool {
     crate::experiments::enabled(crate::experiments::Experiment::DotScope)
@@ -63,13 +66,24 @@ impl HudSender {
 }
 
 /// One frame for the compositor.
-enum Drawn {
+pub(crate) enum Drawn {
     Capsule(IndicatorUniforms),
     Dots(DotFrame),
 }
 
-struct DotFrame {
-    pose: Pose,
+impl Drawn {
+    /// This frame faded by `opacity`, as an enclosing view fades.
+    pub(crate) fn faded(mut self, opacity: f32) -> Self {
+        match &mut self {
+            Drawn::Capsule(uniforms) => uniforms.opacity *= opacity,
+            Drawn::Dots(frame) => frame.pose.opacity *= opacity,
+        }
+        self
+    }
+}
+
+pub(crate) struct DotFrame {
+    pub(crate) pose: Pose,
     tuning: Tuning,
     columns: usize,
     rows: usize,
@@ -184,10 +198,7 @@ fn run(
             Some(scope) => {
                 let (stage, visible, loudness) = model.dot_scope(now);
                 scope.advance(dt, stage, visible, loudness);
-                (
-                    Drawn::Dots(scope.frame()),
-                    visible || !scope.scope.settled(),
-                )
+                (Drawn::Dots(scope.frame()), visible || !scope.settled())
             }
             None => (Drawn::Capsule(frame.uniforms), frame.visible),
         };
@@ -213,20 +224,20 @@ fn run(
 }
 
 /// Dot scope's simulation and the stage it last showed.
-struct DotScope {
+pub(crate) struct DotScope {
     scope: Scope,
     stage: Stage,
 }
 
 impl DotScope {
-    fn new(tuning: Tuning) -> Self {
+    pub(crate) fn new(tuning: Tuning) -> Self {
         Self {
             scope: Scope::new(tuning),
             stage: Stage::Recording,
         }
     }
 
-    fn restart(&mut self, tuning: Tuning) {
+    pub(crate) fn restart(&mut self, tuning: Tuning) {
         self.scope.tune(tuning);
         self.stage = Stage::Recording;
         self.scope.restart(false);
@@ -234,7 +245,7 @@ impl DotScope {
 
     /// `stage` is `None` while the HUD hides or a capture was cancelled:
     /// the last stage fades out.
-    fn advance(&mut self, dt: f32, stage: Option<Stage>, visible: bool, loudness: f32) {
+    pub(crate) fn advance(&mut self, dt: f32, stage: Option<Stage>, visible: bool, loudness: f32) {
         if let Some(stage) = stage {
             self.stage = stage;
         }
@@ -249,7 +260,12 @@ impl DotScope {
         );
     }
 
-    fn frame(&self) -> DotFrame {
+    /// Whether it has faded out.
+    pub(crate) fn settled(&self) -> bool {
+        self.scope.settled()
+    }
+
+    pub(crate) fn frame(&self) -> DotFrame {
         DotFrame {
             pose: self.scope.pose(),
             tuning: self.scope.tuning(),
@@ -307,7 +323,7 @@ fn bytes<T: Copy>(value: &T) -> &[u8] {
 
 #[derive(Default)]
 struct HudCompositor {
-    gpu: Option<Gpu>,
+    gpu: Option<Painter>,
 }
 
 impl Compositor<Hud> for HudCompositor {
@@ -317,16 +333,18 @@ impl Compositor<Hud> for HudCompositor {
             return;
         };
         if self.gpu.as_ref().is_none_or(|gpu| gpu.format != f.format) {
-            self.gpu = Some(Gpu::new(f.device, f.format));
+            self.gpu = Some(Painter::new(f.device, f.format));
         }
         let gpu = self.gpu.as_ref().expect("created above");
+        let (width, height) = (f.size.0 as f32, f.size.1 as f32);
         gpu.draw(
             f.queue,
             f.encoder,
             f.target,
             drawn,
             Target {
-                size: f.size,
+                viewport: [0.0, 0.0, width, height],
+                clip: [0, 0, f.size.0, f.size.1],
                 scale: f.rt.env.scale,
                 dark: f.rt.env.system_dark,
             },
@@ -336,15 +354,20 @@ impl Compositor<Hud> for HudCompositor {
 
 /// What a frame draws into.
 #[derive(Clone, Copy)]
-struct Target {
-    /// In device pixels.
-    size: (u32, u32),
-    scale: f32,
-    dark: bool,
+pub(crate) struct Target {
+    /// The HUD's window in the target, x, y, width and height in device
+    /// pixels.
+    pub(crate) viewport: [f32; 4],
+    /// The pixels it may touch, x, y, width and height, inside the target.
+    pub(crate) clip: [u32; 4],
+    /// Device pixels per point.
+    pub(crate) scale: f32,
+    pub(crate) dark: bool,
 }
 
-struct Gpu {
-    format: wgpu::TextureFormat,
+/// The HUD's shaders, ready to draw frames into targets of one format.
+pub(crate) struct Painter {
+    pub(crate) format: wgpu::TextureFormat,
     capsule: wgpu::Buffer,
     dot_uniforms: wgpu::Buffer,
     dots: wgpu::Buffer,
@@ -353,8 +376,8 @@ struct Gpu {
     dot_pipeline: wgpu::RenderPipeline,
 }
 
-impl Gpu {
-    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Gpu {
+impl Painter {
+    pub(crate) fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Painter {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("hex hud"),
             source: wgpu::ShaderSource::Wgsl(include_str!("rune_hud.wgsl").into()),
@@ -413,6 +436,8 @@ impl Gpu {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
+        // Display values; a linear target decodes them.
+        let constants = [("linear_target", f64::from(u8::from(format.is_srgb())))];
         let pipeline = |fragment: &str| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(fragment),
@@ -429,7 +454,10 @@ impl Gpu {
                 fragment: Some(wgpu::FragmentState {
                     module: &module,
                     entry_point: Some(fragment),
-                    compilation_options: Default::default(),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &constants,
+                        ..Default::default()
+                    },
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
                         blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -440,7 +468,7 @@ impl Gpu {
                 cache: None,
             })
         };
-        Gpu {
+        Painter {
             format,
             capsule,
             dot_uniforms,
@@ -452,7 +480,7 @@ impl Gpu {
     }
 
     /// Draws `drawn` over `view`, which holds what is under it.
-    fn draw(
+    pub(crate) fn draw(
         &self,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -460,7 +488,8 @@ impl Gpu {
         drawn: &Drawn,
         target: Target,
     ) {
-        let resolution = [target.size.0 as f32, target.size.1 as f32];
+        let [x, y, width, height] = target.viewport;
+        let resolution = [width, height];
         let pipeline = match drawn {
             Drawn::Capsule(uniforms) => {
                 let uniforms = IndicatorUniforms {
@@ -526,6 +555,9 @@ impl Gpu {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        pass.set_viewport(x, y, width, height, 0.0, 1.0);
+        let [cx, cy, cw, ch] = target.clip;
+        pass.set_scissor_rect(cx, cy, cw, ch);
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &self.bind, &[]);
         pass.draw(0..3, 0..1);
@@ -635,7 +667,7 @@ mod tests {
             block_on(instance.request_adapter(&Default::default())).expect("a GPU adapter");
         let (device, queue) = block_on(adapter.request_device(&Default::default())).unwrap();
         let format = wgpu::TextureFormat::Rgba8Unorm;
-        let gpu = Gpu::new(&device, format);
+        let gpu = Painter::new(&device, format);
         let scale = 2.0;
         let window = if dots {
             DOT_SCOPE_WINDOW
@@ -693,7 +725,12 @@ mod tests {
                 &mut encoder,
                 &view,
                 drawn,
-                Target { size, scale, dark },
+                Target {
+                    viewport: [0.0, 0.0, size.0 as f32, size.1 as f32],
+                    clip: [0, 0, size.0, size.1],
+                    scale,
+                    dark,
+                },
             );
             encoder.copy_texture_to_buffer(
                 texture.as_image_copy(),

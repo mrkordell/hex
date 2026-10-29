@@ -40,9 +40,9 @@ pub(crate) mod playground;
 #[cfg(hex_capture)]
 mod scrawl;
 mod settings;
+mod sound_sets;
 #[cfg(target_os = "macos")]
 pub(crate) mod story_link;
-mod sound_sets;
 mod vocabulary;
 mod voice_action;
 
@@ -203,6 +203,33 @@ pub(crate) fn render_app(rune_args: Vec<String>) -> rune::App<Ui> {
     build(Default::default(), playground && playground::enabled()).args(rune_args)
 }
 
+/// The window's compositor: the UI, then the welcome hero over the tour's
+/// stage and the Sounds sheet's HUD over its stage.
+#[derive(Default)]
+pub(crate) struct WindowCompositor {
+    hero: hero::HeroCompositor,
+    sounds: sound_sets::Preview,
+}
+
+impl rune::compose::Compositor<Ui> for WindowCompositor {
+    fn features(&self) -> wgpu::Features {
+        self.hero.features()
+    }
+
+    fn animating(&self) -> bool {
+        self.hero.animating()
+    }
+
+    fn summary(&mut self, device: &wgpu::Device) -> Option<String> {
+        self.hero.summary(device)
+    }
+
+    fn render(&mut self, f: &mut rune::compose::Frame<'_, Ui>) {
+        self.hero.render(f);
+        self.sounds.render(f);
+    }
+}
+
 fn build(connect: host::Connect, with_playground: bool) -> rune::App<Ui> {
     let spec = if with_playground {
         playground::spec(spec())
@@ -212,7 +239,7 @@ fn build(connect: host::Connect, with_playground: bool) -> rune::App<Ui> {
     let app = rune::App::new(spec)
         .init(move || Ui::load_with(connect))
         .on_close(on_close)
-        .compositor(hero::HeroCompositor::default());
+        .compositor(WindowCompositor::default());
     let app = if with_playground {
         playground::attach(app)
     } else {
@@ -368,10 +395,10 @@ pub(crate) fn render() {
     let with_playground =
         std::env::args().any(|arg| arg == "--playground") && playground::enabled();
     if !with_playground {
-        rune::run_with(spec(), hero::HeroCompositor::default());
+        rune::run_with(spec(), WindowCompositor::default());
         return;
     }
-    let app = rune::App::new(playground::spec(spec())).compositor(hero::HeroCompositor::default());
+    let app = rune::App::new(playground::spec(spec())).compositor(WindowCompositor::default());
     playground::attach(app).run();
 }
 
@@ -1237,7 +1264,7 @@ fn view(ui: &Ui, cx: &mut Cx<Ui>) -> El {
     if let Some(modal) = explainer::modal(ui, cx, p) {
         layer.extend(modal);
     }
-    if let Some(modal) = sound_sets::modal(ui, cx, p) {
+    if let Some(modal) = sound_sets::modal(ui, p) {
         layer.extend(modal);
     }
     let mut tour_layer = Vec::new();
@@ -1944,19 +1971,32 @@ const SCENES: &[Scene] = &[
             TranscriptionModelId::ParakeetV3,
         ]);
     }),
-    // The sound sets sheet, at rest and as Wood's dictation reaches stop.
+    // The sound sets sheet at rest, then Wood's dictation recording under
+    // Dot scope and, without the experiment, the capsule.
     ("sound-sets", |ui| {
         *ui = mac_fixture();
         sound_sets::fixture(ui, None);
     }),
     ("sound-sets-playing", |ui| {
         *ui = mac_fixture();
+        ui.platform.hud.dot_scope = Some(crate::dot_scope::Tuning::default());
         sound_sets::fixture(
             ui,
             Some((
                 crate::feedback::SoundSet::Wood,
                 crate::feedback::Audition::Dictation,
-                600.0,
+                900.0,
+            )),
+        );
+    }),
+    ("sound-sets-capsule", |ui| {
+        *ui = mac_fixture();
+        sound_sets::fixture(
+            ui,
+            Some((
+                crate::feedback::SoundSet::Wood,
+                crate::feedback::Audition::Dictation,
+                900.0,
             )),
         );
     }),

@@ -34,7 +34,7 @@ mod dashboard;
 mod desktop_activity;
 mod desktop_host;
 mod desktop_i18n;
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 mod desktop_indicator_model;
 #[cfg(target_os = "macos")]
 mod developer_control;
@@ -139,7 +139,7 @@ mod process_exit;
 mod recognition;
 #[cfg(target_os = "macos")]
 mod recording_environment;
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 mod rune_hud;
 mod rune_ui;
 #[cfg(target_os = "macos")]

@@ -289,7 +289,9 @@ substitute for source inspection or a second roadmap.
   feature owns its settings), History, and under Experiments the Voice Filter
   and developer-only HUD Lab (release too while `dot-scope` is on, Dot scope
   only) and Activity, the transcription
-  picker, the onboarding tour, the macOS meeting capsules, the `--snap`
+  picker, the Sounds sheet (its stage replays `rune_hud`'s HUD, drawn by the
+  window's compositor with `rune_hud.wgsl`), the onboarding tour, the macOS
+  meeting capsules, the `--snap`
   fixture scenes, and the macOS `hex://story/…` playground links
   (`story_link`, `hex-test://` in test builds). `platform::Capabilities` decides which panes and rows exist;
   `rune_ui/linux_host.rs`, `windows_host.rs`, and `macos_host.rs` connect it to

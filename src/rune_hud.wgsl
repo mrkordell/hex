@@ -1,11 +1,14 @@
 // The dictation HUD on Linux and Windows: a line-for-line WGSL port of
 // `dictation_indicator.metal`, drawn by `rune_hud.rs` through the HUD
-// overlay's Rune compositor. Keep it in lockstep with the Metal source: any
+// overlay's Rune compositor, and over the Sounds sheet's stage. Keep it in lockstep with the Metal source: any
 // change there is mirrored here, function by function and in the same order.
 //
 // Differences from Metal, all mechanical:
-// - `uv` comes from the fragment position over the resolution, which equals
-//   Metal's interpolated `uv` at every pixel centre.
+// - The viewport is the HUD's window: the whole overlay, or a rect of the
+//   Settings window. `uv` is interpolated across it, as Metal's is, and
+//   `position` is the pixel within it.
+// - A linear (sRGB-format) target gets linear colour: the shaders write
+//   display values, which an sRGB-blended target takes as they are.
 // - `smoothstep` is spelled out (`sstep`): Metal's handles descending edges
 //   (`coverage`), which WGSL leaves to the backend.
 // - The dots arrive packed two u16 to a u32, four to a vec4, in a uniform
@@ -44,10 +47,18 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
+override linear_target: bool = false;
+
+struct Varyings {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+}
+
 @vertex
-fn indicator_vertex(@builtin(vertex_index) vertex_id: u32) -> @builtin(position) vec4f {
+fn indicator_vertex(@builtin(vertex_index) vertex_id: u32) -> Varyings {
     var positions = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
-    return vec4f(positions[vertex_id], 0.0, 1.0);
+    let p = positions[vertex_id];
+    return Varyings(vec4f(p, 0.0, 1.0), vec2f(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5));
 }
 
 fn sstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -94,9 +105,20 @@ fn dithered(result_in: vec4f, position: vec2f) -> vec4f {
     return result;
 }
 
+// Premultiplied display colour as the target takes it.
+fn for_target(result: vec4f) -> vec4f {
+    if (!linear_target || result.a <= 0.0) {
+        return result;
+    }
+    let c = result.rgb / result.a;
+    let linear = select(pow((c + 0.055) / 1.055, vec3f(2.4)), c / 12.92, c <= vec3f(0.04045));
+    return vec4f(linear * result.a, result.a);
+}
+
 @fragment
-fn indicator_fragment(@builtin(position) position: vec4f) -> @location(0) vec4f {
-    let uv = position.xy / uniforms.resolution;
+fn indicator_fragment(in: Varyings) -> @location(0) vec4f {
+    let uv = in.uv;
+    let position = uv * uniforms.resolution;
     let backing_scale = uniforms.resolution.x / 112.0;
     let point = (uv * uniforms.resolution - uniforms.resolution * 0.5)
         / backing_scale / max(uniforms.scale, 0.001);
@@ -321,7 +343,7 @@ fn indicator_fragment(@builtin(position) position: vec4f) -> @location(0) vec4f 
     let recording_flash_rim = exp2(-pow(abs(distance) / 0.9, 2.0));
     screen(&result, vec3f(1.0, 0.58, 0.48), recording_flash_rim * recording_flash * 0.82);
 
-    return dithered(result * uniforms.opacity, position.xy);
+    return for_target(dithered(result * uniforms.opacity, position));
 }
 
 // Dot scope (experiment `dot-scope`): a plate of dots lit by `dot_scope.rs`.
@@ -360,8 +382,9 @@ fn dot_value(index: i32) -> vec2f {
 }
 
 @fragment
-fn dot_scope_fragment(@builtin(position) position: vec4f) -> @location(0) vec4f {
-    let uv = position.xy / u.resolution;
+fn dot_scope_fragment(in: Varyings) -> @location(0) vec4f {
+    let uv = in.uv;
+    let position = uv * u.resolution;
     let scale = max(u.scale, 0.001);
     let window_point = (uv * u.resolution - u.resolution * 0.5) / u.backing_scale;
     let point = window_point / scale;
@@ -435,5 +458,5 @@ fn dot_scope_fragment(@builtin(position) position: vec4f) -> @location(0) vec4f 
         }
     }
 
-    return dithered(result * u.opacity, position.xy);
+    return for_target(dithered(result * u.opacity, position));
 }

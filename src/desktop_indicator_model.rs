@@ -260,7 +260,11 @@ impl IndicatorModel {
     }
 
     pub fn handle(&mut self, event: DictationIndicatorEvent) {
-        let now = Instant::now();
+        self.handle_at(event, Instant::now());
+    }
+
+    /// [`Self::handle`] at `now`, for a replay on its own clock.
+    pub fn handle_at(&mut self, event: DictationIndicatorEvent, now: Instant) {
         let editing_started = matches!(event, DictationIndicatorEvent::EditingStarted);
         match event {
             DictationIndicatorEvent::Reset => {
