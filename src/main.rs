@@ -63,7 +63,7 @@ mod gguf_session;
 #[cfg_attr(any(target_os = "linux", target_os = "windows"), allow(dead_code))]
 mod hex_microphone;
 mod history;
-#[cfg(target_os = "macos")]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod hud_placement;
 mod instance;
 #[cfg(target_os = "macos")]
